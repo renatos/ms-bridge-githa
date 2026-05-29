@@ -64,6 +64,7 @@ jobs:
           cat << 'EOF' > .env
           PORT=3000
           GITHA_BRIDGE_API_KEY=${{ secrets.GITHA_BRIDGE_API_KEY }}
+          GITHA_WEBHOOK_API_KEY=${{ secrets.GITHA_WEBHOOK_API_KEY }}
           GITHA_WEBHOOK_URL=${{ secrets.GITHA_WEBHOOK_URL }}
           NODE_ENV=production
           EOF
