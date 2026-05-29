@@ -60,8 +60,13 @@ jobs:
           
           cd /opt/githa/ms-bridge-githa
           
-          # Gera o arquivo .env de forma limpa
-          printf "PORT=3000\nGITHA_BRIDGE_API_KEY=%s\n" "${{ secrets.GITHA_BRIDGE_API_KEY }}" > .env
+          # Gera o arquivo .env de forma limpa e legível
+          cat << 'EOF' > .env
+          PORT=3000
+          GITHA_BRIDGE_API_KEY=${{ secrets.GITHA_BRIDGE_API_KEY }}
+          GITHA_WEBHOOK_URL=${{ secrets.GITHA_WEBHOOK_URL }}
+          NODE_ENV=production
+          EOF
           
           npm install --production
           # Reinicia no PM2 do usuário ubuntu
