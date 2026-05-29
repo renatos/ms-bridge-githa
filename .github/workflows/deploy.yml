@@ -29,8 +29,8 @@ jobs:
         username: ubuntu
         key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
         script: |
-          if [ -d "/opt/githa/githa-bridge" ]; then
-            sudo chown -R ubuntu:ubuntu /opt/githa/githa-bridge
+          if [ -d "/opt/githa/ms-bridge-githa" ]; then
+            sudo chown -R ubuntu:ubuntu /opt/githa/ms-bridge-githa
           fi
 
     - name: Copy files to Host
@@ -40,7 +40,7 @@ jobs:
         username: ubuntu
         key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
         source: "dist/*,package.json,package-lock.json"
-        target: "/opt/githa/githa-bridge"
+        target: "/opt/githa/ms-bridge-githa"
         rm: true
 
     - name: Restart Service via SSH
@@ -50,21 +50,19 @@ jobs:
         username: ubuntu
         key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
         script: |
-          # Garante que a pasta existe e pertence ao usuário openclaw
-          sudo mkdir -p /opt/githa/githa-bridge
-          sudo chown -R openclaw:openclaw /opt/githa/githa-bridge
+          # Garante que a pasta existe e pertence ao usuário ubuntu
+          sudo mkdir -p /opt/githa/ms-bridge-githa
+          sudo chown -R ubuntu:ubuntu /opt/githa/ms-bridge-githa
           
-          # Executa o restante como usuário openclaw
-          sudo -u openclaw bash -c '
-            export NVM_DIR="/home/openclaw/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-            
-            cd /opt/githa/githa-bridge
-            
-            # Gera o arquivo .env de forma limpa
-            printf "PORT=3000\nBRIDGE_API_KEY=%s\n" "${{ secrets.GITHA_BRIDGE_API_KEY }}" > .env
-            
-            npm install --production
-            # Reinicia no PM2 do usuário openclaw
-            pm2 restart githa-bridge --update-env || pm2 start dist/server.js --name githa-bridge
-          '
+          # Executa as etapas no NVM e PM2 diretamente como o usuário ubuntu
+          export NVM_DIR="/home/ubuntu/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          
+          cd /opt/githa/ms-bridge-githa
+          
+          # Gera o arquivo .env de forma limpa
+          printf "PORT=3000\nGITHA_BRIDGE_API_KEY=%s\n" "${{ secrets.GITHA_BRIDGE_API_KEY }}" > .env
+          
+          npm install --production
+          # Reinicia no PM2 do usuário ubuntu
+          pm2 restart ms-bridge-githa --update-env || pm2 start dist/server.js --name ms-bridge-githa

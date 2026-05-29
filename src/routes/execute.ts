@@ -1,6 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { OpenClawHandler } from '../handlers/OpenClawHandler.js';
+import { WhatsAppHandler } from '../handlers/WhatsAppHandler.js';
 
 const executeSchema = z.object({
   action: z.string(),
@@ -24,7 +24,7 @@ export const executeRoutes = async (fastify: FastifyInstance) => {
       let result;
 
       if (action.startsWith('whatsapp:')) {
-        result = await OpenClawHandler.handle(action, params || {});
+        result = await WhatsAppHandler.handle(action, params || {});
       } else if (action === 'system:ping') {
         result = { status: 'pong', timestamp: new Date().toISOString() };
       } else {

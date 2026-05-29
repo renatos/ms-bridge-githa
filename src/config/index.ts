@@ -5,7 +5,8 @@ dotenv.config();
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
-  BRIDGE_API_KEY: z.string(),
+  GITHA_BRIDGE_API_KEY: z.string(),
+  GITHA_WEBHOOK_URL: z.string().url().optional(),
 });
 
 const result = envSchema.safeParse(process.env);

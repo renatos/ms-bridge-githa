@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { env } from './config/index.js';
 import { authMiddleware } from './middleware/auth.js';
 import { executeRoutes } from './routes/execute.js';
+import { WhatsAppService } from './core/WhatsAppService.js';
 
 const fastify = Fastify({
   logger: true,
@@ -9,7 +10,12 @@ const fastify = Fastify({
 
 // Health check
 fastify.get('/health', async () => {
-  return { status: 'ok', version: '1.0.0' };
+  const wsStatus = WhatsAppService.getStatus();
+  return { 
+    status: 'ok', 
+    version: '1.0.0',
+    whatsapp: wsStatus
+  };
 });
 
 // API Routes
@@ -22,6 +28,9 @@ fastify.register(async (instance) => {
 
 const start = async () => {
   try {
+    // Initialize WhatsApp client
+    await WhatsAppService.initialize();
+
     await fastify.listen({ 
       port: env.PORT, 
       host: '0.0.0.0' // Allow access from containers

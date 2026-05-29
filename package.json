@@ -1,13 +1,13 @@
 {
-  "name": "githa-bridge",
+  "name": "ms-bridge-githa",
   "version": "1.0.0",
   "description": "",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "nodemon src/server.ts",
+    "dev": "nodemon --exec tsx src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.ts",
+    "start": "node dist/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -17,12 +17,16 @@
     "dotenv": "^17.4.2",
     "fastify": "^5.8.5",
     "fastify-plugin": "^5.1.0",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "github:wwebjs/whatsapp-web.js#main",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.8.0",
+    "@types/qrcode-terminal": "^0.12.0",
     "@types/ws": "^8.18.1",
     "nodemon": "^3.1.14",
+    "tsx": "^4.19.3",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3",
     "ws": "^8.20.1"

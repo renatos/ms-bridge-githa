@@ -28,3 +28,5 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+/.wwebjs_auth/
+/.wwebjs_cache/
