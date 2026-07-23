@@ -127,7 +127,7 @@ export class WhatsAppService {
 
   public static async sendMessage(to: string, message: string, login?: string, role?: string): Promise<any> {
     if (!this.client || !this.isReady) {
-      throw new Error('WhatsApp service is not initialized or not ready yet.');
+      throw new Error('Sessão do WhatsApp desconectada ou aguardando leitura do QR Code no servidor (isReady = false). Escaneie o QR Code executando os logs do ms-bridge-githa no servidor.');
     }
 
     // Standardize Brazilian and international formats

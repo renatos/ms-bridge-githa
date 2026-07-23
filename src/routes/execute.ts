@@ -33,10 +33,11 @@ export const executeRoutes = async (fastify: FastifyInstance) => {
 
       return { success: true, data: result };
     } catch (error: any) {
-      fastify.log.error(`Error executing action ${action}: ${error.message}`);
+      const errorMessage = error?.message || 'Unknown error executing action';
+      fastify.log.error(`Error executing action ${action}: ${errorMessage}`);
       return reply.status(500).send({ 
         success: false, 
-        error: error.message 
+        error: errorMessage 
       });
     }
   });
