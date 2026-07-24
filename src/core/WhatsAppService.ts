@@ -149,9 +149,9 @@ export class WhatsAppService {
     }
 
     return {
-      id: response.id.id,
-      to: response.to,
-      timestamp: response.timestamp
+      id: response?.id?.id ?? null,
+      to: response?.to ?? null,
+      timestamp: response?.timestamp ?? null
     };
   }
 
