@@ -69,9 +69,43 @@ export class WhatsAppService {
       }
 
       const cleanFrom = msg.from.replace('@c.us', '');
+      const profileName = msg._data?.notifyName || msg._data?.pushname || msg._data?.name || null;
       const conversation = this.activeConversations.get(cleanFrom);
       const targetLogin = conversation ? conversation.login : null;
       const targetRole = conversation ? conversation.role : null;
+
+      // 1. Dispatch incoming message to githa-backend for Lead management
+      if (env.GITHA_BACKEND_URL) {
+        const leadPayload = {
+          timestamp: msg.timestamp ? new Date(msg.timestamp * 1000).toISOString().replace('Z', '') : new Date().toISOString().replace('Z', ''),
+          phone: cleanFrom,
+          message: msg.body,
+          profileName: profileName
+        };
+
+        fetch(`${env.GITHA_BACKEND_URL}/api/leads/incoming`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Bridge-Secret': env.GITHA_BRIDGE_SECRET || env.GITHA_BRIDGE_API_KEY
+          },
+          body: JSON.stringify(leadPayload)
+        }).then(res => {
+          if (!res.ok) {
+            console.error(`[WhatsAppService] Lead dispatch failed with status: ${res.status}`);
+          } else {
+            console.log(`[WhatsAppService] Lead message forwarded to githa-backend (${cleanFrom})`);
+          }
+        }).catch((err: any) => {
+          console.error(`[WhatsAppService] Error forwarding lead to githa-backend: ${err.message}`);
+        });
+      }
+
+      // 2. Dispatch to ms-webhook-githa for appointment/conversation routing
+      if (!env.GITHA_WEBHOOK_URL) {
+        console.log('[WhatsAppService] Webhook URL not configured. Skipping forward.');
+        return;
+      }
 
       const payload = {
         accountGroupId: null,
