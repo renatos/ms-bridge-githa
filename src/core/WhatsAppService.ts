@@ -191,6 +191,8 @@ export class WhatsAppService {
     }
 
     let chatId = to.trim();
+    let conversationKey = chatId.replace('@lid', '').replace('@c.us', '');
+
     if (chatId.endsWith('@lid') || chatId.endsWith('@c.us')) {
       // already contains suffix
     } else if (chatId.length >= 14 && !chatId.startsWith('55')) {
@@ -201,14 +203,15 @@ export class WhatsAppService {
         normalizedTo = '55' + normalizedTo;
       }
       chatId = `${normalizedTo}@c.us`;
+      conversationKey = normalizedTo;
     }
 
     console.log(`[WhatsAppService] Sending message to: ${chatId}`);
     const response = await this.client.sendMessage(chatId, message);
 
     if (login && role) {
-      this.activeConversations.set(normalizedTo, { login, role });
-      console.log(`[WhatsAppService] Associated conversation for ${normalizedTo} to login ${login}`);
+      this.activeConversations.set(conversationKey, { login, role });
+      console.log(`[WhatsAppService] Associated conversation for ${conversationKey} to login ${login}`);
     }
 
     return {
