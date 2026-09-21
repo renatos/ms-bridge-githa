@@ -66,6 +66,7 @@ jobs:
           GITHA_BRIDGE_API_KEY=${{ secrets.GITHA_BRIDGE_API_KEY }}
           GITHA_WEBHOOK_API_KEY=${{ secrets.GITHA_WEBHOOK_API_KEY }}
           GITHA_WEBHOOK_URL=${{ secrets.GITHA_WEBHOOK_URL }}
+          GITHA_BACKEND_URL=${{ secrets.GITHA_BACKEND_URL || 'http://localhost:8080' }}
           NODE_ENV=production
           EOF
           
