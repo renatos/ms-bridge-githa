@@ -115,6 +115,10 @@ export class WhatsAppService {
           phone = msg.from.replace('@c.us', '');
         }
 
+        if (phone) {
+          phone = phone.replace('@c.us', '').replace('@lid', '').replace(/\D/g, '');
+        }
+
         const cleanFrom = phone || whatsAppLid || msg.from;
         const profileName = msg._data?.notifyName || msg._data?.pushname || msg._data?.name || null;
         const conversation = this.activeConversations.get(cleanFrom);
