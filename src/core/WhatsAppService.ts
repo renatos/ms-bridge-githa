@@ -63,11 +63,6 @@ export class WhatsAppService {
 
       console.log(`[WhatsAppService] New message received from ${msg.from}: "${msg.body}"`);
 
-      if (!env.GITHA_WEBHOOK_URL) {
-        console.log('[WhatsAppService] Webhook URL not configured. Skipping forward.');
-        return;
-      }
-
       let phone: string | null = null;
       let whatsAppLid: string | null = null;
 
@@ -125,48 +120,47 @@ export class WhatsAppService {
         }).catch((err: any) => {
           console.error(`[WhatsAppService] Error forwarding lead to githa-backend: ${err.message}`);
         });
+      } else {
+        console.warn('[WhatsAppService] GITHA_BACKEND_URL not configured. Lead message will not be registered.');
       }
 
-      // 2. Dispatch to ms-webhook-githa for appointment/conversation routing
-      if (!env.GITHA_WEBHOOK_URL) {
-        console.log('[WhatsAppService] Webhook URL not configured. Skipping forward.');
-        return;
-      }
-
-      const payload = {
-        accountGroupId: null,
-        targetLogin,
-        targetRole,
-        payload: {
-          type: 'WHATSAPP_NOTIFICATION',
-          data: {
-            status: 'RECEIVED',
-            from: cleanFrom,
-            body: msg.body,
-            timestamp: msg.timestamp,
-            type: msg.type,
-            hasMedia: msg.hasMedia
+      // 2. Dispatch to ms-webhook-githa ONLY for targeted active conversations (avoids spamming all sessions globally)
+      if (env.GITHA_WEBHOOK_URL && (targetLogin || targetRole)) {
+        const payload = {
+          accountGroupId: null,
+          targetLogin,
+          targetRole,
+          payload: {
+            type: 'WHATSAPP_NOTIFICATION',
+            data: {
+              status: 'RECEIVED',
+              from: cleanFrom,
+              body: msg.body,
+              timestamp: msg.timestamp,
+              type: msg.type,
+              hasMedia: msg.hasMedia
+            }
           }
-        }
-      };
+        };
 
-      try {
-        const response = await fetch(env.GITHA_WEBHOOK_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-bridge-secret': env.GITHA_BRIDGE_API_KEY
-          },
-          body: JSON.stringify(payload)
-        });
+        try {
+          const response = await fetch(env.GITHA_WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-bridge-secret': env.GITHA_BRIDGE_API_KEY
+            },
+            body: JSON.stringify(payload)
+          });
 
-        if (!response.ok) {
-          console.error(`[WhatsAppService] Webhook dispatch failed. Status: ${response.status} - ${response.statusText}`);
-        } else {
-          console.log(`[WhatsAppService] Webhook successfully sent to ${env.GITHA_WEBHOOK_URL}`);
+          if (!response.ok) {
+            console.error(`[WhatsAppService] Webhook dispatch failed. Status: ${response.status} - ${response.statusText}`);
+          } else {
+            console.log(`[WhatsAppService] Webhook successfully sent to ${env.GITHA_WEBHOOK_URL} for target ${targetLogin || targetRole}`);
+          }
+        } catch (err: any) {
+          console.error(`[WhatsAppService] Error dispatching webhook to ${env.GITHA_WEBHOOK_URL}: ${err.message}`);
         }
-      } catch (err: any) {
-        console.error(`[WhatsAppService] Error dispatching webhook to ${env.GITHA_WEBHOOK_URL} (ms-webhook-githa might be offline): ${err.message}`);
       }
     });
 
