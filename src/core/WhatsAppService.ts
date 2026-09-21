@@ -55,47 +55,74 @@ export class WhatsAppService {
       this.isReady = true;
     });
 
+    const resolveWithTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+      let timer: any;
+      return Promise.race([
+        promise.then((res) => {
+          clearTimeout(timer);
+          return res;
+        }),
+        new Promise<T>((resolve) => {
+          timer = setTimeout(() => resolve(fallback), ms);
+        })
+      ]);
+    };
+
     this.client.on('message', async (msg: any) => {
-      // Ignorar mensagens de grupos por padrão
-      if (msg.from.endsWith('@g.us')) {
-        return;
-      }
-
-      console.log(`[WhatsAppService] New message received from ${msg.from}: "${msg.body}"`);
-
-      let phone: string | null = null;
-      let whatsAppLid: string | null = null;
-
-      if (msg.from.endsWith('@lid')) {
-        whatsAppLid = msg.from.replace('@lid', '');
-        try {
-          if (typeof this.client.getContactLidAndPhone === 'function') {
-            const details = await this.client.getContactLidAndPhone([msg.from]);
-            if (details && details.length > 0 && details[0]?.pn) {
-              phone = details[0].pn;
-            }
-          }
-          if (!phone && typeof msg.getContact === 'function') {
-            const contact = await msg.getContact();
-            if (contact && contact.number && !contact.number.includes('@')) {
-              phone = contact.number;
-            }
-          }
-        } catch (err: any) {
-          console.warn(`[WhatsAppService] Could not resolve phone from LID (${msg.from}): ${err.message}`);
+      try {
+        // Ignorar mensagens de grupos por padrão
+        if (msg.from && msg.from.endsWith('@g.us')) {
+          return;
         }
-      } else {
-        phone = msg.from.replace('@c.us', '');
-      }
 
-      const cleanFrom = phone || whatsAppLid || msg.from;
-      const profileName = msg._data?.notifyName || msg._data?.pushname || msg._data?.name || null;
-      const conversation = this.activeConversations.get(cleanFrom);
-      const targetLogin = conversation ? conversation.login : null;
-      const targetRole = conversation ? conversation.role : null;
+        console.log(`[WhatsAppService] New message received from ${msg.from}: "${msg.body}"`);
 
-      // 1. Dispatch incoming message to githa-backend for Lead management
-      if (env.GITHA_BACKEND_URL) {
+        let phone: string | null = null;
+        let whatsAppLid: string | null = null;
+
+        if (msg.from && msg.from.endsWith('@lid')) {
+          whatsAppLid = msg.from.replace('@lid', '');
+          try {
+            if (typeof (this.client as any).getContactLidAndPhone === 'function') {
+              const details: any = await resolveWithTimeout(
+                (this.client as any).getContactLidAndPhone([msg.from]),
+                1500,
+                null
+              );
+              if (details && Array.isArray(details) && details.length > 0 && details[0]?.pn) {
+                phone = details[0].pn;
+                console.log(`[WhatsAppService] Resolved phone ${phone} from LID ${whatsAppLid} via getContactLidAndPhone`);
+              }
+            }
+          } catch (err: any) {
+            console.warn(`[WhatsAppService] Error in getContactLidAndPhone: ${err.message}`);
+          }
+
+          if (!phone) {
+            try {
+              if (typeof msg.getContact === 'function') {
+                const contact: any = await resolveWithTimeout(msg.getContact(), 1500, null);
+                if (contact && contact.number && !contact.number.includes('@')) {
+                  phone = contact.number;
+                  console.log(`[WhatsAppService] Resolved phone ${phone} from LID ${whatsAppLid} via getContact`);
+                }
+              }
+            } catch (err: any) {
+              console.warn(`[WhatsAppService] Error in msg.getContact: ${err.message}`);
+            }
+          }
+        } else if (msg.from) {
+          phone = msg.from.replace('@c.us', '');
+        }
+
+        const cleanFrom = phone || whatsAppLid || msg.from;
+        const profileName = msg._data?.notifyName || msg._data?.pushname || msg._data?.name || null;
+        const conversation = this.activeConversations.get(cleanFrom);
+        const targetLogin = conversation ? conversation.login : null;
+        const targetRole = conversation ? conversation.role : null;
+
+        // 1. Dispatch incoming message to githa-backend for Lead management
+        const backendUrl = env.GITHA_BACKEND_URL || 'http://localhost:8080';
         const leadPayload = {
           timestamp: msg.timestamp ? new Date(msg.timestamp * 1000).toISOString().replace('Z', '') : new Date().toISOString().replace('Z', ''),
           phone: phone,
@@ -104,63 +131,69 @@ export class WhatsAppService {
           profileName: profileName
         };
 
-        fetch(`${env.GITHA_BACKEND_URL}/api/leads/incoming`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Bridge-Secret': env.GITHA_BRIDGE_SECRET || env.GITHA_BRIDGE_API_KEY
-          },
-          body: JSON.stringify(leadPayload)
-        }).then(res => {
-          if (!res.ok) {
-            console.error(`[WhatsAppService] Lead dispatch failed with status: ${res.status}`);
-          } else {
-            console.log(`[WhatsAppService] Lead message forwarded to githa-backend (phone=${phone}, lid=${whatsAppLid})`);
-          }
-        }).catch((err: any) => {
-          console.error(`[WhatsAppService] Error forwarding lead to githa-backend: ${err.message}`);
-        });
-      } else {
-        console.warn('[WhatsAppService] GITHA_BACKEND_URL not configured. Lead message will not be registered.');
-      }
-
-      // 2. Dispatch to ms-webhook-githa ONLY for targeted active conversations (avoids spamming all sessions globally)
-      if (env.GITHA_WEBHOOK_URL && (targetLogin || targetRole)) {
-        const payload = {
-          accountGroupId: null,
-          targetLogin,
-          targetRole,
-          payload: {
-            type: 'WHATSAPP_NOTIFICATION',
-            data: {
-              status: 'RECEIVED',
-              from: cleanFrom,
-              body: msg.body,
-              timestamp: msg.timestamp,
-              type: msg.type,
-              hasMedia: msg.hasMedia
-            }
-          }
-        };
+        console.log(`[WhatsAppService] Forwarding lead to ${backendUrl}/api/leads/incoming:`, JSON.stringify(leadPayload));
 
         try {
-          const response = await fetch(env.GITHA_WEBHOOK_URL, {
+          const res = await fetch(`${backendUrl}/api/leads/incoming`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'x-bridge-secret': env.GITHA_BRIDGE_API_KEY
+              'X-Bridge-Secret': env.GITHA_BRIDGE_SECRET || env.GITHA_BRIDGE_API_KEY
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(leadPayload)
           });
 
-          if (!response.ok) {
-            console.error(`[WhatsAppService] Webhook dispatch failed. Status: ${response.status} - ${response.statusText}`);
+          if (!res.ok) {
+            const errorText = await res.text().catch(() => '');
+            console.error(`[WhatsAppService] Lead dispatch failed with HTTP ${res.status}: ${errorText}`);
           } else {
-            console.log(`[WhatsAppService] Webhook successfully sent to ${env.GITHA_WEBHOOK_URL} for target ${targetLogin || targetRole}`);
+            const resData = await res.json().catch(() => null);
+            console.log(`[WhatsAppService] Lead message forwarded to githa-backend successfully! Response:`, JSON.stringify(resData));
           }
         } catch (err: any) {
-          console.error(`[WhatsAppService] Error dispatching webhook to ${env.GITHA_WEBHOOK_URL}: ${err.message}`);
+          console.error(`[WhatsAppService] Error forwarding lead to githa-backend: ${err.message}`);
         }
+
+        // 2. Dispatch to ms-webhook-githa ONLY for targeted active conversations (avoids spamming all sessions globally)
+        if (env.GITHA_WEBHOOK_URL && (targetLogin || targetRole)) {
+          const payload = {
+            accountGroupId: null,
+            targetLogin,
+            targetRole,
+            payload: {
+              type: 'WHATSAPP_NOTIFICATION',
+              data: {
+                status: 'RECEIVED',
+                from: cleanFrom,
+                body: msg.body,
+                timestamp: msg.timestamp,
+                type: msg.type,
+                hasMedia: msg.hasMedia
+              }
+            }
+          };
+
+          try {
+            const response = await fetch(env.GITHA_WEBHOOK_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-bridge-secret': env.GITHA_BRIDGE_API_KEY
+              },
+              body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+              console.error(`[WhatsAppService] Webhook dispatch failed. Status: ${response.status} - ${response.statusText}`);
+            } else {
+              console.log(`[WhatsAppService] Webhook successfully sent to ${env.GITHA_WEBHOOK_URL} for target ${targetLogin || targetRole}`);
+            }
+          } catch (err: any) {
+            console.error(`[WhatsAppService] Error dispatching webhook to ${env.GITHA_WEBHOOK_URL}: ${err.message}`);
+          }
+        }
+      } catch (globalErr: any) {
+        console.error('[WhatsAppService] Unexpected error processing incoming message:', globalErr);
       }
     });
 
