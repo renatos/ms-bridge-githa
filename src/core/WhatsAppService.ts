@@ -68,7 +68,32 @@ export class WhatsAppService {
         return;
       }
 
-      const cleanFrom = msg.from.replace('@c.us', '');
+      let phone: string | null = null;
+      let whatsAppLid: string | null = null;
+
+      if (msg.from.endsWith('@lid')) {
+        whatsAppLid = msg.from.replace('@lid', '');
+        try {
+          if (typeof this.client.getContactLidAndPhone === 'function') {
+            const details = await this.client.getContactLidAndPhone([msg.from]);
+            if (details && details.length > 0 && details[0]?.pn) {
+              phone = details[0].pn;
+            }
+          }
+          if (!phone && typeof msg.getContact === 'function') {
+            const contact = await msg.getContact();
+            if (contact && contact.number && !contact.number.includes('@')) {
+              phone = contact.number;
+            }
+          }
+        } catch (err: any) {
+          console.warn(`[WhatsAppService] Could not resolve phone from LID (${msg.from}): ${err.message}`);
+        }
+      } else {
+        phone = msg.from.replace('@c.us', '');
+      }
+
+      const cleanFrom = phone || whatsAppLid || msg.from;
       const profileName = msg._data?.notifyName || msg._data?.pushname || msg._data?.name || null;
       const conversation = this.activeConversations.get(cleanFrom);
       const targetLogin = conversation ? conversation.login : null;
@@ -78,7 +103,8 @@ export class WhatsAppService {
       if (env.GITHA_BACKEND_URL) {
         const leadPayload = {
           timestamp: msg.timestamp ? new Date(msg.timestamp * 1000).toISOString().replace('Z', '') : new Date().toISOString().replace('Z', ''),
-          phone: cleanFrom,
+          phone: phone,
+          whatsAppLid: whatsAppLid,
           message: msg.body,
           profileName: profileName
         };
@@ -94,7 +120,7 @@ export class WhatsAppService {
           if (!res.ok) {
             console.error(`[WhatsAppService] Lead dispatch failed with status: ${res.status}`);
           } else {
-            console.log(`[WhatsAppService] Lead message forwarded to githa-backend (${cleanFrom})`);
+            console.log(`[WhatsAppService] Lead message forwarded to githa-backend (phone=${phone}, lid=${whatsAppLid})`);
           }
         }).catch((err: any) => {
           console.error(`[WhatsAppService] Error forwarding lead to githa-backend: ${err.message}`);
@@ -164,15 +190,18 @@ export class WhatsAppService {
       throw new Error('Sessão do WhatsApp desconectada ou aguardando leitura do QR Code no servidor (isReady = false). Escaneie o QR Code executando os logs do ms-bridge-githa no servidor.');
     }
 
-    // Standardize Brazilian and international formats
-    let normalizedTo = to.replace(/\D/g, ''); // Keep only digits
-
-    if (normalizedTo.length === 10 || normalizedTo.length === 11) {
-      normalizedTo = '55' + normalizedTo;
+    let chatId = to.trim();
+    if (chatId.endsWith('@lid') || chatId.endsWith('@c.us')) {
+      // already contains suffix
+    } else if (chatId.length >= 14 && !chatId.startsWith('55')) {
+      chatId = `${chatId}@lid`;
+    } else {
+      let normalizedTo = chatId.replace(/\D/g, '');
+      if (normalizedTo.length === 10 || normalizedTo.length === 11) {
+        normalizedTo = '55' + normalizedTo;
+      }
+      chatId = `${normalizedTo}@c.us`;
     }
-
-    // Append @c.us if not already present
-    const chatId = normalizedTo.endsWith('@c.us') ? normalizedTo : `${normalizedTo}@c.us`;
 
     console.log(`[WhatsAppService] Sending message to: ${chatId}`);
     const response = await this.client.sendMessage(chatId, message);
