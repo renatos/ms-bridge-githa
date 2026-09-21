@@ -70,8 +70,8 @@ export class WhatsAppService {
 
     this.client.on('message', async (msg: any) => {
       try {
-        // Ignorar mensagens de grupos por padrão
-        if (msg.from && msg.from.endsWith('@g.us')) {
+        // Ignorar mensagens de grupos e status/stories
+        if (!msg.from || msg.from.endsWith('@g.us') || msg.from === 'status@broadcast' || msg.from.includes('broadcast') || msg.broadcast || msg.isStatus) {
           return;
         }
 
@@ -119,6 +119,12 @@ export class WhatsAppService {
           phone = phone.replace('@c.us', '').replace('@lid', '').replace(/\D/g, '');
         }
 
+        // Se não tiver nem telefone nem WhatsApp LID, ignora o despacho
+        if (!phone && !whatsAppLid) {
+          console.log(`[WhatsAppService] Skipping lead dispatch: neither phone nor LID could be resolved for ${msg.from}`);
+          return;
+        }
+
         const cleanFrom = phone || whatsAppLid || msg.from;
         const profileName = msg._data?.notifyName || msg._data?.pushname || msg._data?.name || null;
         const conversation = this.activeConversations.get(cleanFrom);
@@ -127,11 +133,15 @@ export class WhatsAppService {
 
         // 1. Dispatch incoming message to githa-backend for Lead management
         const backendUrl = (env.GITHA_BACKEND_URL || 'http://127.0.0.1:8080').replace('localhost', '127.0.0.1');
+        const isoTimestamp = msg.timestamp ? new Date(msg.timestamp * 1000).toISOString() : new Date().toISOString();
+        const formattedTimestamp = isoTimestamp.split('.')[0]; // YYYY-MM-DDTHH:mm:ss
+        const messageText = (msg.body && msg.body.trim()) ? msg.body.trim() : (msg.hasMedia ? '[Mídia recebida]' : '[Mensagem recebida]');
+
         const leadPayload = {
-          timestamp: msg.timestamp ? new Date(msg.timestamp * 1000).toISOString().replace('Z', '') : new Date().toISOString().replace('Z', ''),
+          timestamp: formattedTimestamp,
           phone: phone,
           whatsAppLid: whatsAppLid,
-          message: msg.body,
+          message: messageText,
           profileName: profileName
         };
 
@@ -150,12 +160,14 @@ export class WhatsAppService {
 
           if (!res.ok) {
             const errorText = await res.text().catch(() => '');
+            console.log(`[WhatsAppService] ❌ Lead dispatch FAILED with HTTP ${res.status}: ${errorText}`);
             console.error(`[WhatsAppService] Lead dispatch failed with HTTP ${res.status}: ${errorText}`);
           } else {
             const resData = await res.json().catch(() => null);
-            console.log(`[WhatsAppService] Lead message forwarded to githa-backend successfully! Response:`, JSON.stringify(resData));
+            console.log(`[WhatsAppService] ✅ Lead message forwarded to githa-backend successfully! Response:`, JSON.stringify(resData));
           }
         } catch (err: any) {
+          console.log(`[WhatsAppService] ❌ Error forwarding lead to githa-backend: ${err.message}`);
           console.error(`[WhatsAppService] Error forwarding lead to githa-backend: ${err.message}`);
         }
 
