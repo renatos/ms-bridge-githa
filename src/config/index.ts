@@ -9,6 +9,8 @@ const envSchema = z.object({
   GITHA_BRIDGE_SECRET: z.string().optional(),
   GITHA_WEBHOOK_URL: z.string().url().default('http://127.0.0.1:8085/internal/events/broadcast'),
   GITHA_BACKEND_URL: z.string().url().default('http://127.0.0.1:8080'),
+  TIMEZONE: z.string().default('America/Sao_Paulo'),
+  DISCARDED_LEAD_PHRASES: z.string().optional(),
 });
 
 const result = envSchema.safeParse(process.env);
