@@ -2,6 +2,7 @@ import { env } from './index.js';
 
 export const DEFAULT_DISCARDED_PHRASES: string[] = [
   '[Mensagem recebida]',
+  '[Mensagem]',
 ];
 
 /**

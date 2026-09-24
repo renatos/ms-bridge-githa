@@ -79,6 +79,11 @@ export class WhatsAppService {
           return;
         }
 
+        // Ignorar eventos técnicos do WhatsApp que não possuem texto nem mídia
+        if ((!msg.body || !msg.body.trim()) && !msg.hasMedia) {
+          return;
+        }
+
         const direction = isOutbound ? 'OUTBOUND' : 'INBOUND';
         console.log(`[WhatsAppService] Message (${direction}) ${isOutbound ? 'sent to ' + remoteJid : 'received from ' + remoteJid}: "${msg.body}"`);
 
