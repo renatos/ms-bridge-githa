@@ -69,24 +69,28 @@ export class WhatsAppService {
       ]);
     };
 
-    this.client.on('message', async (msg: any) => {
+    this.client.on('message_create', async (msg: any) => {
       try {
+        const isOutbound = Boolean(msg.fromMe);
+        const remoteJid = isOutbound ? msg.to : msg.from;
+
         // Ignorar mensagens de grupos e status/stories
-        if (!msg.from || msg.from.endsWith('@g.us') || msg.from === 'status@broadcast' || msg.from.includes('broadcast') || msg.broadcast || msg.isStatus) {
+        if (!remoteJid || remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast' || remoteJid.includes('broadcast') || msg.broadcast || msg.isStatus) {
           return;
         }
 
-        console.log(`[WhatsAppService] New message received from ${msg.from}: "${msg.body}"`);
+        const direction = isOutbound ? 'OUTBOUND' : 'INBOUND';
+        console.log(`[WhatsAppService] Message (${direction}) ${isOutbound ? 'sent to ' + remoteJid : 'received from ' + remoteJid}: "${msg.body}"`);
 
         let phone: string | null = null;
         let whatsAppLid: string | null = null;
 
-        if (msg.from && msg.from.endsWith('@lid')) {
-          whatsAppLid = msg.from.replace('@lid', '');
+        if (remoteJid.endsWith('@lid')) {
+          whatsAppLid = remoteJid.replace('@lid', '');
           try {
             if (typeof (this.client as any).getContactLidAndPhone === 'function') {
               const details: any = await resolveWithTimeout(
-                (this.client as any).getContactLidAndPhone([msg.from]),
+                (this.client as any).getContactLidAndPhone([remoteJid]),
                 1500,
                 null
               );
@@ -112,8 +116,8 @@ export class WhatsAppService {
               console.warn(`[WhatsAppService] Error in msg.getContact: ${err.message}`);
             }
           }
-        } else if (msg.from) {
-          phone = msg.from.replace('@c.us', '');
+        } else if (remoteJid) {
+          phone = remoteJid.replace('@c.us', '');
         }
 
         if (phone) {
@@ -122,22 +126,22 @@ export class WhatsAppService {
 
         // Se não tiver nem telefone nem WhatsApp LID, ignora o despacho
         if (!phone && !whatsAppLid) {
-          console.log(`[WhatsAppService] Skipping lead dispatch: neither phone nor LID could be resolved for ${msg.from}`);
+          console.log(`[WhatsAppService] Skipping lead dispatch: neither phone nor LID could be resolved for ${remoteJid}`);
           return;
         }
 
-        const cleanFrom = phone || whatsAppLid || msg.from;
+        const cleanFrom = phone || whatsAppLid || remoteJid;
         const profileName = msg._data?.notifyName || msg._data?.pushname || msg._data?.name || null;
         const conversation = this.activeConversations.get(cleanFrom);
         const targetLogin = conversation ? conversation.login : null;
         const targetRole = conversation ? conversation.role : null;
 
-        // 1. Dispatch incoming message to githa-backend for Lead management
+        // 1. Dispatch message to githa-backend for Lead management
         const backendUrl = (env.GITHA_BACKEND_URL || 'http://127.0.0.1:8080').replace('localhost', '127.0.0.1');
         const epochMs = (msg.timestamp && msg.timestamp > 1e11) ? msg.timestamp : (msg.timestamp ? msg.timestamp * 1000 : Date.now());
         const dateObj = new Date(epochMs);
         const formattedTimestamp = dateObj.toLocaleString('sv-SE', { timeZone: env.TIMEZONE || 'America/Sao_Paulo' }).replace(' ', 'T');
-        const messageText = (msg.body && msg.body.trim()) ? msg.body.trim() : (msg.hasMedia ? '[Mídia recebida]' : '[Mensagem recebida]');
+        const messageText = (msg.body && msg.body.trim()) ? msg.body.trim() : (msg.hasMedia ? '[Mídia]' : '[Mensagem]');
 
         if (isMessageDiscarded(messageText)) {
           console.log(`[WhatsAppService] ⏭️ Skipping lead dispatch: message "${messageText}" is in discarded phrases list.`);
@@ -147,10 +151,11 @@ export class WhatsAppService {
             phone: phone,
             whatsAppLid: whatsAppLid,
             message: messageText,
-            profileName: profileName
+            profileName: profileName,
+            direction: direction
           };
 
-          console.log(`[WhatsAppService] Forwarding lead to ${backendUrl}/api/leads/incoming:`, JSON.stringify(leadPayload));
+          console.log(`[WhatsAppService] Forwarding lead message (${direction}) to ${backendUrl}/api/leads/incoming:`, JSON.stringify(leadPayload));
 
           try {
             const res = await fetch(`${backendUrl}/api/leads/incoming`, {
@@ -169,7 +174,7 @@ export class WhatsAppService {
               console.error(`[WhatsAppService] Lead dispatch failed with HTTP ${res.status}: ${errorText}`);
             } else {
               const resData = await res.json().catch(() => null);
-              console.log(`[WhatsAppService] ✅ Lead message forwarded to githa-backend successfully! Response:`, JSON.stringify(resData));
+              console.log(`[WhatsAppService] ✅ Lead message (${direction}) forwarded to githa-backend successfully! Response:`, JSON.stringify(resData));
             }
           } catch (err: any) {
             console.log(`[WhatsAppService] ❌ Error forwarding lead to githa-backend: ${err.message}`);
@@ -187,12 +192,13 @@ export class WhatsAppService {
             payload: {
               type: 'WHATSAPP_NOTIFICATION',
               data: {
-                status: 'RECEIVED',
+                status: isOutbound ? 'SENT' : 'RECEIVED',
                 from: cleanFrom,
                 body: msg.body,
                 timestamp: msg.timestamp,
                 type: msg.type,
-                hasMedia: msg.hasMedia
+                hasMedia: msg.hasMedia,
+                direction: direction
               }
             }
           };
@@ -218,7 +224,7 @@ export class WhatsAppService {
           }
         }
       } catch (globalErr: any) {
-        console.error('[WhatsAppService] Unexpected error processing incoming message:', globalErr);
+        console.error('[WhatsAppService] Unexpected error processing message:', globalErr);
       }
     });
 
