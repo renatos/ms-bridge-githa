@@ -141,17 +141,18 @@ export class WhatsAppService {
         const targetLogin = conversation ? conversation.login : null;
         const targetRole = conversation ? conversation.role : null;
 
-        // 1. Dispatch message to githa-backend for Lead management
+        // 1. Dispatch message to githa-backend (Conversation Message Controller)
         const backendUrl = (env.GITHA_BACKEND_URL || 'http://127.0.0.1:8080').replace('localhost', '127.0.0.1');
+        const incomingPath = env.GITHA_INCOMING_MESSAGE_PATH || '/api/conversation-messages/incoming';
         const epochMs = (msg.timestamp && msg.timestamp > 1e11) ? msg.timestamp : (msg.timestamp ? msg.timestamp * 1000 : Date.now());
         const dateObj = new Date(epochMs);
         const formattedTimestamp = dateObj.toLocaleString('sv-SE', { timeZone: env.TIMEZONE || 'America/Sao_Paulo' }).replace(' ', 'T');
         const messageText = (msg.body && msg.body.trim()) ? msg.body.trim() : (msg.hasMedia ? '[Mídia]' : '[Mensagem]');
 
         if (isMessageDiscarded(messageText)) {
-          console.log(`[WhatsAppService] ⏭️ Skipping lead dispatch: message "${messageText}" is in discarded phrases list.`);
+          console.log(`[WhatsAppService] ⏭️ Skipping conversation dispatch: message "${messageText}" is in discarded phrases list.`);
         } else {
-          const leadPayload = {
+          const conversationPayload = {
             timestamp: formattedTimestamp,
             phone: phone,
             whatsAppLid: whatsAppLid,
@@ -160,30 +161,30 @@ export class WhatsAppService {
             direction: direction
           };
 
-          console.log(`[WhatsAppService] Forwarding lead message (${direction}) to ${backendUrl}/api/leads/incoming:`, JSON.stringify(leadPayload));
+          console.log(`[WhatsAppService] Forwarding conversation message (${direction}) to ${backendUrl}${incomingPath}:`, JSON.stringify(conversationPayload));
 
           try {
-            const res = await fetch(`${backendUrl}/api/leads/incoming`, {
+            const res = await fetch(`${backendUrl}${incomingPath}`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'X-Bridge-Secret': env.GITHA_BRIDGE_SECRET || env.GITHA_BRIDGE_API_KEY
               },
-              body: JSON.stringify(leadPayload),
+              body: JSON.stringify(conversationPayload),
               signal: AbortSignal.timeout(5000)
             });
 
             if (!res.ok) {
               const errorText = await res.text().catch(() => '');
-              console.log(`[WhatsAppService] ❌ Lead dispatch FAILED with HTTP ${res.status}: ${errorText}`);
-              console.error(`[WhatsAppService] Lead dispatch failed with HTTP ${res.status}: ${errorText}`);
+              console.log(`[WhatsAppService] ❌ Conversation dispatch FAILED with HTTP ${res.status}: ${errorText}`);
+              console.error(`[WhatsAppService] Conversation dispatch failed with HTTP ${res.status}: ${errorText}`);
             } else {
               const resData = await res.json().catch(() => null);
-              console.log(`[WhatsAppService] ✅ Lead message (${direction}) forwarded to githa-backend successfully! Response:`, JSON.stringify(resData));
+              console.log(`[WhatsAppService] ✅ Conversation message (${direction}) forwarded to githa-backend successfully! Response:`, JSON.stringify(resData));
             }
           } catch (err: any) {
-            console.log(`[WhatsAppService] ❌ Error forwarding lead to githa-backend: ${err.message}`);
-            console.error(`[WhatsAppService] Error forwarding lead to githa-backend: ${err.message}`);
+            console.log(`[WhatsAppService] ❌ Error forwarding conversation message to githa-backend: ${err.message}`);
+            console.error(`[WhatsAppService] Error forwarding conversation message to githa-backend: ${err.message}`);
           }
         }
 

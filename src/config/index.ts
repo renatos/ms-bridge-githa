@@ -11,6 +11,7 @@ const envSchema = z.object({
   GITHA_BACKEND_URL: z.string().url().default('http://127.0.0.1:8080'),
   TIMEZONE: z.string().default('America/Sao_Paulo'),
   DISCARDED_LEAD_PHRASES: z.string().optional(),
+  GITHA_INCOMING_MESSAGE_PATH: z.string().default('/api/conversation-messages/incoming'),
 });
 
 const result = envSchema.safeParse(process.env);
